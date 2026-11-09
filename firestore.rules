@@ -1,0 +1,240 @@
+rules_version = '2';
+
+// Mindora Family v2 Firestore rules.
+//
+// This file intentionally protects only the proposed R1.1 schema.  It is not
+// deployed by this change.  Privileged lifecycle operations (account creation,
+// invitations, relationship acceptance/revocation, device registration,
+// aggregation, policy delivery, AI, and notification delivery) require a
+// trusted backend using the Admin SDK, which bypasses these client rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function childSelf(childId) {
+      return isSelf(childId);
+    }
+
+    function guardianPath(childId, parentUid) {
+      return /databases/$(database)/documents/children/$(childId)/guardians/$(parentUid);
+    }
+
+    function revocationPath(childId, parentUid) {
+      return /databases/$(database)/documents/children/$(childId)/guardianRevocations/$(parentUid);
+    }
+
+    // A parent grant is valid only while its deterministic membership document
+    // exists, has the expected immutable path fields, is accepted, and no
+    // deterministic revocation marker exists.  Rules never query opaque
+    // relationships/{id} documents to discover authorization.
+    function activeGuardian(childId) {
+      return signedIn()
+        && exists(guardianPath(childId, request.auth.uid))
+        && !exists(revocationPath(childId, request.auth.uid))
+        && get(guardianPath(childId, request.auth.uid)).data.parentUid == request.auth.uid
+        && get(guardianPath(childId, request.auth.uid)).data.childId == childId
+        && get(guardianPath(childId, request.auth.uid)).data.status == 'accepted';
+    }
+
+    function guardianHasScope(childId, scope) {
+      return activeGuardian(childId)
+        && get(guardianPath(childId, request.auth.uid)).data.allowedDataScopes[scope] == true;
+    }
+
+    function validSafeAccountUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'locale', 'timeZone'])
+        && (!('displayName' in request.resource.data)
+          || request.resource.data.displayName is string)
+        && (!('locale' in request.resource.data)
+          || request.resource.data.locale is string)
+        && (!('timeZone' in request.resource.data)
+          || request.resource.data.timeZone is string);
+    }
+
+    function validChildProfileUpdate(childId) {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'avatarRef', 'timeZone'])
+        && request.resource.data.childId == childId
+        && request.resource.data.displayName is string
+        && request.resource.data.timeZone is string
+        && (!('avatarRef' in request.resource.data)
+          || request.resource.data.avatarRef is string);
+    }
+
+    function validMood(childId, dateKey) {
+      return request.resource.data.keys()
+          .hasOnly(['date', 'timeZone', 'moodCode', 'note', 'reportedAt'])
+        && request.resource.data.keys()
+          .hasAll(['date', 'timeZone', 'moodCode'])
+        && request.resource.data.date == dateKey
+        && request.resource.data.timeZone is string
+        && request.resource.data.moodCode in ['great', 'good', 'okay', 'low', 'bad']
+        && (!('note' in request.resource.data) || request.resource.data.note is string)
+        && (!('reportedAt' in request.resource.data) || request.resource.data.reportedAt is timestamp);
+    }
+
+    function validAssessment(childId, assessmentId) {
+      return request.resource.data.keys()
+          .hasOnly(['assessmentVersion', 'scores', 'submittedAt'])
+        && request.resource.data.keys().hasAll(['assessmentVersion', 'scores'])
+        && request.resource.data.assessmentVersion is string
+        && request.resource.data.scores is map
+        && request.resource.data.scores.keys()
+          .hasOnly(['anxiety', 'stress', 'digitalControl', 'phoneDiscomfort'])
+        && request.resource.data.scores.keys()
+          .hasAll(['anxiety', 'stress', 'digitalControl', 'phoneDiscomfort'])
+        && request.resource.data.scores.anxiety is int
+        && request.resource.data.scores.stress is int
+        && request.resource.data.scores.digitalControl is int
+        && request.resource.data.scores.phoneDiscomfort is int
+        && request.resource.data.scores.anxiety >= 0 && request.resource.data.scores.anxiety <= 10
+        && request.resource.data.scores.stress >= 0 && request.resource.data.scores.stress <= 10
+        && request.resource.data.scores.digitalControl >= 0 && request.resource.data.scores.digitalControl <= 10
+        && request.resource.data.scores.phoneDiscomfort >= 0 && request.resource.data.scores.phoneDiscomfort <= 10
+        && (!('submittedAt' in request.resource.data) || request.resource.data.submittedAt is timestamp);
+    }
+
+    // Accounts are provisioned by the trusted backend.  A user may only edit
+    // safe preferences on their own existing document; role and lifecycle fields
+    // are consequently immutable to every client.
+    match /accounts/{uid} {
+      allow get: if isSelf(uid);
+      allow list, create, delete: if false;
+      allow update: if isSelf(uid) && validSafeAccountUpdate();
+
+      // Tokens and endpoint lifecycle are server-managed.  Notification inbox
+      // records are recipient-private; a recipient may only mark an existing
+      // record read, never create or redirect one.
+      match /notificationEndpoints/{endpointId} {
+        allow read, write: if false;
+      }
+
+      match /notifications/{notificationId} {
+        allow get, list: if isSelf(uid);
+        allow create, delete: if false;
+        allow update: if isSelf(uid)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['isRead', 'readAt'])
+          && request.resource.data.isRead is bool
+          && (!('readAt' in request.resource.data)
+            || request.resource.data.readAt is timestamp);
+      }
+    }
+
+    // Invitation and lifecycle records can only be made or transitioned by the
+    // future trusted backend.  Exact-document reads expose only a record that
+    // already names the caller; list queries are denied to avoid enumeration.
+    match /relationshipInvitations/{inviteId} {
+      allow get: if signedIn()
+        && (resource.data.parentId == request.auth.uid
+          || resource.data.childId == request.auth.uid);
+      allow list, create, update, delete: if false;
+    }
+
+    match /relationships/{relationshipId} {
+      allow get: if signedIn()
+        && (resource.data.parentId == request.auth.uid
+          || resource.data.childId == request.auth.uid);
+      allow list, create, update, delete: if false;
+    }
+
+    // The parent-side mirror permits a parent to list their own children from a
+    // deterministic path.  It grants no child-domain access and is server-only.
+    match /parents/{parentUid}/children/{childId} {
+      allow get, list: if isSelf(parentUid);
+      allow create, update, delete: if false;
+    }
+
+    match /children/{childId} {
+      allow get: if childSelf(childId) || guardianHasScope(childId, 'profileRead');
+      allow list, create, delete: if false;
+      allow update: if childSelf(childId) && validChildProfileUpdate(childId);
+
+      // These membership and revocation mirrors are authorization facts.  They
+      // are never client-writable, including by the named parent or child.
+      match /guardians/{parentUid} {
+        allow get: if childSelf(childId) || isSelf(parentUid);
+        allow list, create, update, delete: if false;
+      }
+
+      match /guardianRevocations/{parentUid} {
+        allow read, write: if false;
+      }
+
+      // Installation ownership, registration credentials, trust state and
+      // per-device telemetry are server-mediated in R1.2.  A registration is
+      // not evidence of parental-control enforcement.
+      match /devices/{installationId} {
+        allow get: if childSelf(childId) || guardianHasScope(childId, 'deviceRead');
+        allow list: if childSelf(childId) || guardianHasScope(childId, 'deviceRead');
+        allow create, update, delete: if false;
+
+        match /usageDays/{dateKey} {
+          allow get, list: if childSelf(childId) || guardianHasScope(childId, 'usageRead');
+          allow create, update, delete: if false;
+
+          match /apps/{appKey} {
+            allow get, list: if childSelf(childId) || guardianHasScope(childId, 'usageDetailRead');
+            allow create, update, delete: if false;
+          }
+        }
+      }
+
+      match /usageDays/{dateKey} {
+        allow get, list: if childSelf(childId) || guardianHasScope(childId, 'usageRead');
+        allow create, update, delete: if false;
+      }
+
+      match /goals/{goalId} {
+        allow get, list: if childSelf(childId) || guardianHasScope(childId, 'goalsRead');
+        allow create, update, delete: if false;
+      }
+
+      match /appPolicies/{policyId} {
+        allow get, list: if childSelf(childId) || guardianHasScope(childId, 'policiesRead');
+        allow create, update, delete: if false;
+      }
+
+      match /moods/{dateKey} {
+        allow get, list: if childSelf(childId) || guardianHasScope(childId, 'moodRead');
+        allow create: if childSelf(childId) && validMood(childId, dateKey);
+        allow update: if childSelf(childId) && validMood(childId, dateKey);
+        allow delete: if false;
+      }
+
+      match /assessments/{assessmentId} {
+        allow get, list: if childSelf(childId) || guardianHasScope(childId, 'assessmentRead');
+        allow create: if childSelf(childId) && validAssessment(childId, assessmentId);
+        allow update: if childSelf(childId) && validAssessment(childId, assessmentId);
+        allow delete: if false;
+      }
+
+      match /analyses/{analysisId} {
+        allow get, list: if childSelf(childId) || guardianHasScope(childId, 'analysisRead');
+        allow create, update, delete: if false;
+      }
+
+      match /recommendations/{recommendationId} {
+        allow get, list: if childSelf(childId) || guardianHasScope(childId, 'recommendationsRead');
+        allow create, update, delete: if false;
+      }
+
+      match /auditEvents/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    // The legacy client schema is intentionally fail-closed.  It must not be
+    // used as an authorization bridge to the v2 schema.
+    match /users/{uid}/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
