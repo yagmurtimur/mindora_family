@@ -4,10 +4,17 @@
   "type": "module",
   "scripts": {
     "test:rules": "node --test firestore.rules.test.mjs",
-    "test:rules:emulator": "firebase --config ../firebase.emulator.json --project mindora-family-rules-local emulators:exec --only firestore -- npm run test:rules"
+    "test:rules:emulator": "firebase --config ../firebase.emulator.json --project mindora-family-rules-local emulators:exec --only firestore \"npm run test:rules\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^4.0.1",
     "firebase": "^11.0.0"
+  },
+  "allowScripts": {
+    "@firebase/util@1.12.1": true,
+    "protobufjs@7.6.6": true
+  },
+  "overrides": {
+    "@grpc/grpc-js": "1.13.7"
   }
 }

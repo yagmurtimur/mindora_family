@@ -95,3 +95,6 @@ macos/Runner/Configs/.BC.*
 
 # Temporary files
 macos/Runner/Configs/.BC.*
+
+# Node.js dependencies
+node_modules/

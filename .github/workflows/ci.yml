@@ -1,0 +1,88 @@
+name: Mindora Family CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flutter:
+    name: Flutter Analysis and Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.1'
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Flutter code
+        shell: bash
+        run: |
+          set +e
+          analysis_output="$(flutter analyze --no-pub 2>&1)"
+          set -e
+
+          printf '%s\n' "$analysis_output"
+
+          if ! grep -Eq '([0-9]+ issues found|No issues found)' <<< "$analysis_output"; then
+            echo "::error::Flutter analysis did not complete successfully."
+            exit 1
+          fi
+
+          if grep -Eq '^[[:space:]]*error[[:space:]]+•' <<< "$analysis_output"; then
+            echo "::error::Flutter analysis found error-level issues."
+            exit 1
+          fi
+
+          echo "Flutter analysis completed without error-level issues."
+
+      - name: Run Flutter tests
+        run: flutter test
+
+  firestore:
+    name: Firestore Security Rules Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: firebase-tests/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Firestore test dependencies
+        working-directory: firebase-tests
+        run: npm ci
+
+      - name: Run Firestore Emulator tests
+        working-directory: firebase-tests
+        run: >
+          npx --yes firebase-tools@15.27.0
+          --config ../firebase.emulator.json
+          --project mindora-family-rules-local
+          emulators:exec --only firestore
+          "npm run test:rules"
