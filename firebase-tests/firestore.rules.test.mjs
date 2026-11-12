@@ -26,6 +26,7 @@ let testEnv;
 const paths = {
   child: (childId) => `children/${childId}`,
   guardian: (childId, parentUid) => `children/${childId}/guardians/${parentUid}`,
+  guardianState: (childId) => `children/${childId}/guardianState/active`,
   revoked: (childId, parentUid) => `children/${childId}/guardianRevocations/${parentUid}`,
   listing: (parentUid, childId) => `parents/${parentUid}/children/${childId}`,
   usage: (childId) => `children/${childId}/usageDays/2026-11-09`,
@@ -75,6 +76,10 @@ async function seedFixture({
           parentUid: 'parent-a', childId: 'child-a', relationshipId: 'relationship-a',
           status: 'accepted', acceptedAt: new Date(), allowedDataScopes: scopes,
           consentPolicyVersion: 'v1', updatedAt: new Date(),
+        }),
+        setDoc(doc(db, paths.guardianState('child-a')), {
+          parentUid: 'parent-a', childId: 'child-a', relationshipId: 'relationship-a',
+          activatedAt: new Date(),
         }),
         setDoc(doc(db, paths.listing('parent-a', 'child-a')), {
           parentUid: 'parent-a', childId: 'child-a', relationshipId: 'relationship-a',
@@ -146,6 +151,26 @@ test('a revocation marker immediately denies a stale guardian membership', async
   await assertFails(getDoc(doc(dbFor('parent-a'), paths.usage('child-a'))));
 });
 
+test('a guardian membership without the active-parent lock grants no child access', async () => {
+  await seedFixture();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+        doc(context.firestore(), paths.guardianState('child-a')),
+        {parentUid: 'parent-b', childId: 'child-a', relationshipId: 'relationship-b'},
+    );
+  });
+  await assertFails(getDoc(doc(dbFor('parent-a'), paths.usage('child-a'))));
+});
+
+test('guardian state is never client-readable or writable', async () => {
+  await seedFixture();
+  const parent = dbFor('parent-a');
+  await assertFails(getDoc(doc(parent, paths.guardianState('child-a'))));
+  await assertFails(setDoc(doc(parent, paths.guardianState('child-a')), {
+    parentUid: 'parent-a', childId: 'child-a', relationshipId: 'forged',
+  }));
+});
+
 test('a child cannot change their own role or another account', async () => {
   await seedFixture();
   const child = dbFor('child-a');
@@ -184,6 +209,10 @@ test('a parent lists multiple accepted children only through their own mirror', 
         parentUid: 'parent-a', childId: 'child-b', relationshipId: 'relationship-b',
         status: 'accepted', acceptedAt: new Date(), allowedDataScopes: { usageRead: true },
         consentPolicyVersion: 'v1', updatedAt: new Date(),
+      }),
+      setDoc(doc(db, paths.guardianState('child-b')), {
+        parentUid: 'parent-a', childId: 'child-b', relationshipId: 'relationship-b',
+        activatedAt: new Date(),
       }),
       setDoc(doc(db, paths.listing('parent-a', 'child-b')), {
         parentUid: 'parent-a', childId: 'child-b', relationshipId: 'relationship-b',

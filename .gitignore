@@ -98,3 +98,25 @@ macos/Runner/Configs/.BC.*
 
 # Node.js dependencies
 node_modules/
+
+# Local AI agent skills
+.agents/
+.claude/
+skills-lock.json
+
+# Local Firebase secrets
+.secret.local
+.secret.*
+
+# Local AI agent skills
+.agents/
+.claude/
+skills-lock.json
+
+# Local Firebase secrets
+.secret.local
+.secret.*
+
+# Dependencies and backups
+functions/node_modules/
+functions/*.before_*

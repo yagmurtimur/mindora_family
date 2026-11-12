@@ -1,4 +1,4 @@
-package com.example.mindora_family
+package com.mindora.family
 
 import android.app.admin.DevicePolicyManager
 import android.app.usage.UsageStatsManager

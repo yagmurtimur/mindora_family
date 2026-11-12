@@ -1,3 +1,5 @@
+import java.util.Properties
+
 
 plugins {
     id("com.android.application")
@@ -7,8 +9,16 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+
+if (!keystorePropertiesFile.exists()) {
+    throw GradleException("android/key.properties bulunamadı")
+}
+keystoreProperties.load(keystorePropertiesFile.inputStream())
+
 android {
-    namespace = "com.example.mindora_family"
+    namespace = "com.mindora.family"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -19,16 +29,25 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.mindora_family"
+        applicationId = "com.mindora.family"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties["keyAlias"] as String
+            keyPassword = keystoreProperties["keyPassword"] as String
+            storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
+            storePassword = keystoreProperties["storePassword"] as String
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

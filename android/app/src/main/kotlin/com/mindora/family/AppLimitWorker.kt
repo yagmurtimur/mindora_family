@@ -1,5 +1,5 @@
 
-package com.example.mindora_family
+package com.mindora.family
 
 import android.app.usage.UsageStatsManager
 import android.app.admin.DevicePolicyManager

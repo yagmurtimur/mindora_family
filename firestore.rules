@@ -29,14 +29,21 @@ service cloud.firestore {
       return /databases/$(database)/documents/children/$(childId)/guardianRevocations/$(parentUid);
     }
 
-    // A parent grant is valid only while its deterministic membership document
-    // exists, has the expected immutable path fields, is accepted, and no
-    // deterministic revocation marker exists.  Rules never query opaque
-    // relationships/{id} documents to discover authorization.
+    function activeGuardianPath(childId) {
+      return /databases/$(database)/documents/children/$(childId)/guardianState/active;
+    }
+
+    // A parent grant is valid only while the child's single active-parent lock
+    // names the caller and its membership document is still accepted.
     function activeGuardian(childId) {
       return signedIn()
+        && exists(activeGuardianPath(childId))
         && exists(guardianPath(childId, request.auth.uid))
         && !exists(revocationPath(childId, request.auth.uid))
+        && get(activeGuardianPath(childId)).data.parentUid == request.auth.uid
+        && get(activeGuardianPath(childId)).data.childId == childId
+        && get(activeGuardianPath(childId)).data.relationshipId
+          == get(guardianPath(childId, request.auth.uid)).data.relationshipId
         && get(guardianPath(childId, request.auth.uid)).data.parentUid == request.auth.uid
         && get(guardianPath(childId, request.auth.uid)).data.childId == childId
         && get(guardianPath(childId, request.auth.uid)).data.status == 'accepted';
@@ -160,11 +167,17 @@ service cloud.firestore {
       // These membership and revocation mirrors are authorization facts.  They
       // are never client-writable, including by the named parent or child.
       match /guardians/{parentUid} {
-        allow get: if childSelf(childId) || isSelf(parentUid);
+        allow get: if childSelf(childId) || activeGuardian(childId);
         allow list, create, update, delete: if false;
       }
 
       match /guardianRevocations/{parentUid} {
+        allow read, write: if false;
+      }
+
+      // This is the trusted backend's single-active-parent lock.  It must not
+      // be observable or mutable by clients.
+      match /guardianState/{stateId} {
         allow read, write: if false;
       }
 

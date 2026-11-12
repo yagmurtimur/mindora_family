@@ -1,1 +1,76 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"mindora-b8cfd","appId":"1:808856202526:android:b3eeaae5490ec59930ad0f","fileOutput":"android/app/google-services.json"}},"ios":{"default":{"projectId":"mindora-b8cfd","appId":"1:808856202526:ios:fe53ddd7c7161f3830ad0f","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"macos":{"default":{"projectId":"mindora-b8cfd","appId":"1:808856202526:ios:fe53ddd7c7161f3830ad0f","uploadDebugSymbols":false,"fileOutput":"macos/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"mindora-b8cfd","configurations":{"android":"1:808856202526:android:b3eeaae5490ec59930ad0f","ios":"1:808856202526:ios:fe53ddd7c7161f3830ad0f","macos":"1:808856202526:ios:fe53ddd7c7161f3830ad0f","web":"1:808856202526:web:091919d92825341a30ad0f","windows":"1:808856202526:web:9496d9af5c8a849f30ad0f"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "mindora-b8cfd",
+          "appId": "1:808856202526:android:b3eeaae5490ec59930ad0f",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "mindora-b8cfd",
+          "appId": "1:808856202526:ios:fe53ddd7c7161f3830ad0f",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "mindora-b8cfd",
+          "appId": "1:808856202526:ios:fe53ddd7c7161f3830ad0f",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "mindora-b8cfd",
+          "configurations": {
+            "android": "1:808856202526:android:b3eeaae5490ec59930ad0f",
+            "ios": "1:808856202526:ios:fe53ddd7c7161f3830ad0f",
+            "macos": "1:808856202526:ios:fe53ddd7c7161f3830ad0f",
+            "web": "1:808856202526:web:091919d92825341a30ad0f",
+            "windows": "1:808856202526:web:9496d9af5c8a849f30ad0f"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint"
+      ]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "functions": {
+      "port": 5001
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
+}
